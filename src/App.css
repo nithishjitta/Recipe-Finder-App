@@ -1,0 +1,6 @@
+*{
+    font-family: var(--font-sans, 'Inter', sans-serif);
+}
+
+/* Small helpers for headings */
+h1,h2,h3{ font-family: var(--font-heading, 'Poppins', sans-serif) }

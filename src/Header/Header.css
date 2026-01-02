@@ -1,0 +1,122 @@
+*{
+  margin:0px;
+  padding:0px;
+}
+.header{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height:90px;
+  background-color: var(--surface);
+}
+.header img{
+  height:60px;
+  background-color: transparent;
+  border-radius: 10px;
+  margin-left:30px;
+}
+.ip{
+  display: flex;
+  align-items: center;
+  position: relative; /* contain absolute icon */
+}
+
+.search-wrapper{ position: relative; display: inline-block }
+.search-wrapper input{ padding-inline-end: 50px }
+
+.search-btn{
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  padding: 6px;
+  display: inline-flex;
+  align-items:center;
+  justify-content:center;
+  cursor: pointer;
+  color: var(--muted-2);
+  border-radius: 6px;
+}
+.search-btn:focus{ outline: 2px solid rgba(39,178,90,0.14); outline-offset: 2px; }
+.search-btn .icon{ font-size: 1rem }
+
+
+.ip input{
+  width:450px;
+  height: 40px;
+  border-radius: 10px;
+  border:1px solid var(--input-border);
+  padding-inline-start: 20px;
+  padding-inline-end: 50px;
+  background-color: var(--input-bg);
+  color: var(--text);
+}
+.icon {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted-2);
+  pointer-events: none; /* ensure clicks pass through to input */
+}
+
+/* Ensure input receives visible focus */
+.ip input:focus{ outline: none; box-shadow: 0 0 0 4px rgba(39,178,90,0.06); border-color: var(--accent); }
+p svg{
+  color:var(--accent);
+  font-size: larger;
+  opacity: 0.95;
+}
+.icon1{
+  color:var(--muted-2);
+  font-size: larger;
+  margin-right: 20px;
+  cursor: pointer;
+}
+.divider{
+  width:2px;
+  height:30px;
+  background-color: var(--input-border);
+  opacity: 0.6;
+  margin-left: 20px;
+  margin-right:20px;
+}
+
+/* Responsive - Header */
+@media (max-width: 720px){
+  .header{
+    flex-direction: column;
+    align-items: stretch;
+    height: auto;
+    padding: 10px 12px;
+    gap: 8px;
+  }
+  .header img{ height: 48px; margin-left: 12px; margin-bottom: 6px }
+  .ip{ width: 100%; padding: 0 12px; position: relative }
+  .ip input{ width: 100%; padding-inline-start: 14px; padding-inline-end: 44px; height:44px }
+  .icon{ position: absolute; top:50%; transform: translateY(-50%); left: auto; right: 22px }
+  .icon1{ margin-right: 8px }
+  .divider{ display: none }
+}
+@media (max-width: 480px){
+  .header{ padding: 8px; }
+  .header img{ height: 44px; margin-left: 8px }
+  .ip input{ height:48px; font-size: 0.95rem }
+  .icon, .icon1{ font-size: 1.15rem; padding: 8px; border-radius: 8px }
+}
+
+/* Dark mode header tweaks */
+.dark .header{
+  background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+.dark .ip input{ background: var(--input-bg); border: 1px solid rgba(255,255,255,0.12); color: var(--text); box-shadow: none }
+.dark .ip input:focus{ outline: none; box-shadow: 0 0 0 6px rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.18); }
+.dark p svg{ opacity: 0.98 }
+.dark .icon, .dark .icon1{ color: var(--muted-2) }
+.dark .clear-search{ border-color: rgba(255,255,255,0.04) }
+.icon:focus{ outline: none }
+.header p{ color: var(--text); margin-left: 12px; margin-right: 12px }
+.dark .header p{ color: var(--muted-2) }

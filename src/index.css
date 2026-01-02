@@ -1,0 +1,104 @@
+/* Base responsive variables & fluid typography */
+:root{
+  --max-content-width: 1100px;
+  --page-pad: clamp(12px, 3vw, 28px);
+  --radius: 12px;
+  --accent: #27b25a;
+  --muted: #6b6b6b;
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+  --font-heading: 'Poppins', var(--font-sans);
+
+  /* Theme tokens (light defaults) */
+  --bg: #F7F5F2;
+  --text: #111;
+  --surface: #ffffff;
+  --muted-2: #6b6b6b;
+  --input-bg: #ffffff;
+  --input-border: gray;
+  --card-bg: #ffffff;
+  --badge-bg: #eef9f0;
+  --badge-text: #1e6b3a;
+  --accent-contrast: #ffffff;
+  /* Card and list accents */
+  --card-border: rgba(0,0,0,0.06);
+  --card-shadow: 0 6px 18px rgba(12,12,12,0.03);
+  --element-border: rgba(0,0,0,0.06);
+  --card-accent: rgba(39,178,90,0.06);
+  --card-accent-2: rgba(100,160,255,0.06);
+  /* List background and border to help group recipe listings */
+  --list-bg: #f2fbf6; /* slightly stronger tint for clearer separation */
+  --list-border: rgba(0,0,0,0.04);
+  /* Alternate card background for light mode */
+  --card-bg-alt: #fbfff9;
+  /* Card sizing tokens */
+  --card-radius: 10px;
+  --card-padding: 12px;
+  --title-size: 1.05rem;
+}
+
+.dark {
+  /* Dark theme overrides */
+  --bg: #050607;
+  --text: #EDEFF2;
+  --surface: #0b0c0d;
+  --muted-2: #a8afb6;
+  --input-bg: #0f1213;
+  --input-border: #233036;
+  --card-bg: #0c0e10;
+  --badge-bg: rgba(39,178,90,0.12);
+  --badge-text: var(--accent);
+  --accent-contrast: #ffffff;
+  --card-border: rgba(255,255,255,0.04); /* slightly lighter border for contrast */
+  --element-border: rgba(255,255,255,0.12);
+  --card-shadow: 0 8px 28px rgba(2,6,8,0.6);
+  --card-accent: rgba(39,178,90,0.12);
+  --card-accent-2: rgba(100,160,255,0.08);
+  --list-bg: rgba(255,255,255,0.01);
+  --list-border: rgba(255,255,255,0.03);
+  --card-bg-alt: rgba(255,255,255,0.01);
+}
+
+html { box-sizing: border-box; }
+*, *::before, *::after { box-sizing: inherit }
+
+/* fluid base font size */
+html { font-size: clamp(14px, 1.35vw + 12px, 18px); }
+
+/* Base fonts */
+body { margin: 0; font-family: var(--font-sans); color: var(--text); background-color: var(--bg); -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; transition: background-color .24s ease, color .24s ease; }
+
+/* Headings use a slightly heavier, more geometric display font */
+h1,h2,h3,h4,h5,h6 { font-family: var(--font-heading); font-weight: 600; color: var(--text); letter-spacing: -0.02em; }
+
+
+
+h1 { font-size: clamp(1.6rem, 3.6vw, 2.4rem); }
+h2 { font-size: clamp(1.25rem, 2.6vw, 1.8rem); }
+
+/* page container helper */
+.container { width: min(1200px, calc(100% - (var(--page-pad) * 2))); margin: 0 auto; padding: 0 var(--page-pad); }
+
+/* small utilities */
+.btn { cursor: pointer; border: none; font-family: inherit }
+.visually-hidden { position: absolute !important; height: 1px; width: 1px; overflow: hidden; clip: rect(1px,1px,1px,1px); white-space: nowrap }
+
+/* responsive images */
+img { max-width: 100%; height: auto; display: block }
+
+/* Subtle element borders for clarity (dark mode only) */
+.dark .header, .dark .box, .dark .sub-box, .dark .recipe-card, .dark .left, .dark .right, .dark .search-heading, .dark .ip input, .dark .sub-container img, .dark .empty-state, .dark .view, .dark .browse, .dark .close-btn, .dark .badge, .dark .suggest, .dark .suggestions {
+  border: 1px solid var(--element-border);
+  border-radius: 8px;
+}
+/* Slightly different treatment for tiny icons / pills */
+.badge, .icon, .icon1, .divider{ border-radius: 999px }
+
+/* Global mobile & accessibility tweaks */
+@media (max-width: 480px){
+  :root{ --page-pad: 12px }
+  button, .btn, .view, .browse, .close-btn, .icon, input[type="button"], input[type="submit"]{ min-height: 44px; }
+  input, textarea{ font-size: 1rem; padding: 10px 12px; }
+  .view, .browse{ padding-left: 12px; padding-right: 12px }
+  :focus{ outline: 3px solid rgba(39,178,90,0.14); outline-offset: 2px }
+  .dark :focus{ outline: 3px solid rgba(39,178,90,0.22); outline-offset: 2px }
+}
