@@ -1,40 +1,7 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import "./FilterBar.css";
 
 const BASE = "https://www.themealdb.com/api/json/v1/1";
-
-/* Curated cuisine-accurate Unsplash images keyed by exact API area name */
-// const AREA_IMAGES = {
-//   American,
-//   British,
-//   Canadian,
-//   Chinese,
-//   Croatian,
-//   Dutch,
-//   Egyptian,
-//   Filipino,
-//   French,
-//   Greek,
-//   India,
-//   Irish,
-//   Italian,
-//   Jamaican,
-//   Japanese,
-//   Kenyan,
-//   Malaysian,
-//   Mexican,
-//   Moroccan,
-//   Polish,
-//   Portuguese,
-//   Russian,
-//   Spanish,
-//   Thai,
-//   Tunisian,
-//   Turkish,
-//   Vietnames,
-//   Unknown,
-// };
-// const FALLBACK = "https://images.unsplash.com/photo-1466637574441-749b8f19452f?w=56&q=75";
 
 export const SORT_OPTIONS = [
   { value: "default", label: "Recommended" },
@@ -45,26 +12,113 @@ export const SORT_OPTIONS = [
   { value: "ingAsc",  label: "Fewest Ingredients" },
 ];
 
-const AREA_IMAGES = {};
-const FALLBACK = "";
+export function getAreaImg() { return ""; }
 
-export function getAreaImg() {
-  return "";
+/* ── Map API area strings → clean country names ── */
+const AREA_LABEL_MAP = {
+  American:   "American",
+  British:    "British",
+  Canadian:   "Canadian",
+  Chinese:    "Chinese",
+  Croatian:   "Croatian",
+  Dutch:      "Dutch",
+  Egyptian:   "Egyptian",
+  Filipino:   "Filipino",
+  French:     "French",
+  Greek:      "Greek",
+  Indian:     "India",
+  Irish:      "Irish",
+  Italian:    "Italy",
+  Jamaican:   "Jamaica",
+  Japanese:   "Japan",
+  Kenyan:     "Kenya",
+  Malaysian:  "Malaysia",
+  Mexican:    "Mexico",
+  Moroccan:   "Morocco",
+  Polish:     "Polish",
+  Portuguese: "Portugal",
+  Russian:    "Russia",
+  Spanish:    "Spain",
+  Thai:       "Thailand",
+  Tunisian:   "Tunisia",
+  Turkish:    "Turkey",
+  Ukrainian:  "Ukraine",
+  Uruguayan:  "Uruguay",
+  Vietnamese: "Vietnam",
+  Unknown:    "Unknown",
+};
+
+/* Returns display label for an area API value */
+export function areaLabel(apiValue) {
+  return AREA_LABEL_MAP[apiValue] || apiValue;
 }
-/* helper exported so RecipeGrid / RecipeDetailPage can get area image */
-// export function getAreaImg(area) { return AREA_IMAGES[area] || FALLBACK; }
 
-/* ── Reusable Dropdown ── */
-function Dropdown({ triggerLabel, options, value, onChange, searchable, className = "" }) {
-  const [open, setOpen] = useState(false);
-  const [q, setQ]       = useState("");
-  const ref             = useRef(null);
+/* ── Dropdown — closes on outside scroll only, stays open for inner scroll ── */
+function Dropdown({ triggerLabel, options, value, onChange, searchable, alignRight = false }) {
+  const [open, setOpen]             = useState(false);
+  const [q, setQ]                   = useState("");
+  const [panelStyle, setPanelStyle] = useState({});
+  const triggerRef                  = useRef(null);
+  const panelRef                    = useRef(null);
 
+  const calcStyle = useCallback(() => {
+    if (!triggerRef.current) return {};
+    const rect       = triggerRef.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const openUp     = spaceBelow < 360 && spaceAbove > spaceBelow;
+
+    const style = { position: "fixed", zIndex: 99999, minWidth: 220, maxWidth: 280 };
+
+    if (openUp) { style.bottom = window.innerHeight - rect.top + 8; style.top = "auto"; }
+    else        { style.top = rect.bottom + 8; style.bottom = "auto"; }
+
+    if (alignRight) { style.right = window.innerWidth - rect.right; style.left = "auto"; }
+    else            { style.left = rect.left; style.right = "auto"; }
+
+    return style;
+  }, [alignRight]);
+
+  const openPanel  = () => { setPanelStyle(calcStyle()); setOpen(true); };
+  const closePanel = useCallback(() => { setOpen(false); setQ(""); }, []);
+
+  /* Close on outside mousedown */
   useEffect(() => {
-    const fn = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    document.addEventListener("mousedown", fn);
-    return () => document.removeEventListener("mousedown", fn);
-  }, []);
+    if (!open) return;
+    const onDown = (e) => {
+      if (
+        triggerRef.current && !triggerRef.current.contains(e.target) &&
+        panelRef.current   && !panelRef.current.contains(e.target)
+      ) closePanel();
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open, closePanel]);
+
+  /* Close on scroll OUTSIDE the panel — ignore scroll events that originate inside panel */
+  useEffect(() => {
+    if (!open) return;
+    const onScroll = (e) => {
+      /* If the scroll event target is inside the panel, do nothing */
+      if (panelRef.current && panelRef.current.contains(e.target)) return;
+      closePanel();
+    };
+    window.addEventListener("scroll", onScroll, { passive: true, capture: true });
+    return () => window.removeEventListener("scroll", onScroll, { capture: true });
+  }, [open, closePanel]);
+
+  /* Close on resize / Escape */
+  useEffect(() => {
+    if (!open) return;
+    const onResize = () => closePanel();
+    const onKey    = (e) => { if (e.key === "Escape") closePanel(); };
+    window.addEventListener("resize", onResize);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open, closePanel]);
 
   const filtered = searchable && q
     ? options.filter(o => o.label.toLowerCase().includes(q.toLowerCase()))
@@ -74,10 +128,11 @@ function Dropdown({ triggerLabel, options, value, onChange, searchable, classNam
   const hasVal = value !== "All" && value !== "default";
 
   return (
-    <div className={`dd-wrap ${className}`} ref={ref}>
+    <div className={`dd-wrap${open ? " open" : ""}`}>
       <button
+        ref={triggerRef}
         className={`dd-trigger${open ? " open" : ""}${hasVal ? " has-val" : ""}`}
-        onClick={() => setOpen(o => !o)}
+        onClick={() => open ? closePanel() : openPanel()}
       >
         <span className="dd-trigger-label">
           {hasVal ? (sel?.label || sel?.value) : triggerLabel}
@@ -87,7 +142,7 @@ function Dropdown({ triggerLabel, options, value, onChange, searchable, classNam
       </button>
 
       {open && (
-        <div className="dd-panel">
+        <div ref={panelRef} className="dd-panel" style={panelStyle}>
           {searchable && (
             <div className="dd-search-box">
               <input
@@ -102,7 +157,7 @@ function Dropdown({ triggerLabel, options, value, onChange, searchable, classNam
             <button
               key={opt.value}
               className={`dd-option${opt.value === value ? " sel" : ""}`}
-              onClick={() => { onChange(opt.value); setOpen(false); setQ(""); }}
+              onClick={() => { onChange(opt.value); closePanel(); }}
             >
               <span>{opt.label}</span>
               {opt.value === value && <span className="dd-option-check">✓</span>}
@@ -128,32 +183,29 @@ export default function FilterBar({
   categories, setCategories,
   areas,    setAreas,
 }) {
-  /* Fetch categories (real API thumbnails) + areas (exact API strings) once */
   useEffect(() => {
     fetch(`${BASE}/categories.php`)
       .then(r => r.json())
       .then(d => {
         if (!d.categories) return;
         setCategories([
-          { value: "All", label: "All Categories"},
-          ...d.categories.map(c => ({
-            value: c.strCategory,
-            label: c.strCategory,
-          })),
+          { value: "All", label: "All Categories" },
+          ...d.categories.map(c => ({ value: c.strCategory, label: c.strCategory })),
         ]);
       })
       .catch(() => {});
 
-    /* list.php?a=list returns the EXACT strArea strings used by filter.php?a=X */
     fetch(`${BASE}/list.php?a=list`)
       .then(r => r.json())
       .then(d => {
         if (!d.meals) return;
+        const sorted = [...d.meals].sort((a, b) => a.strArea.localeCompare(b.strArea));
         setAreas([
           { value: "All", label: "All Regions" },
-          ...d.meals.map(m => ({
+          /* value = exact API string (used for filtering), label = clean display name */
+          ...sorted.map(m => ({
             value: m.strArea,
-            label: m.strArea,
+            label: areaLabel(m.strArea),
           })),
         ]);
       })
@@ -165,7 +217,7 @@ export default function FilterBar({
   const hasFilters  = category !== "All" || area !== "All" || sort !== "default";
 
   return (
-    <div className="filters-bar" style={{ position: "relative" }}>
+    <div className="filters-bar">
       {loading && <div className="filter-loading" />}
       <div className="filters-inner">
 
@@ -193,7 +245,7 @@ export default function FilterBar({
           options={SORT_OPTIONS}
           value={sort}
           onChange={setSort}
-          className="dd-sort"
+          alignRight
         />
 
         {hasFilters && (
