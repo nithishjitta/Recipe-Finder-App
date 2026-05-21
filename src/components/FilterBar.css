@@ -270,8 +270,8 @@
 /* ── Mobile ── */
 @media (max-width: 680px) {
   .filters-bar {
-    margin-top:30px;
-    margin-bottom: -50px;
+    margin-top:20px;
+    margin-bottom: -30px;
   }
 
   /* below mobile header (68 search row + header) */

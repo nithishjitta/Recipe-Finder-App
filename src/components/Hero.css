@@ -372,7 +372,7 @@
 
 @media (max-width: 400px) {
   .hero-content {
-    padding: 32px 14px 0;
+    padding: 32px 14px 15px;
   }
 
   .hero-ctas {
