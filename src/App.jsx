@@ -15,27 +15,20 @@ async function lookupMeal(id) {
   const d = await r.json();
   return d.meals?.[0] || null;
 }
-
-async function batchLookup(filterMeals, limit = 24) {
-  const slice   = filterMeals.slice(0, limit);
-  const results = await Promise.all(slice.map(m => lookupMeal(m.idMeal)));
+async function batchLookup(list, limit = 24) {
+  const results = await Promise.all(list.slice(0, limit).map(m => lookupMeal(m.idMeal)));
   return results.filter(Boolean);
 }
-
 async function fetchByCategory(cat) {
   const r = await fetch(`${BASE}/filter.php?c=${encodeURIComponent(cat)}`);
   const d = await r.json();
   return d.meals || [];
 }
-
-/* Area filter — the API uses the EXACT strArea string from list.php?a=list
-   e.g. "Indian", "Italian", "Chinese" — pass it directly, no mapping needed */
 async function fetchByArea(area) {
   const r = await fetch(`${BASE}/filter.php?a=${encodeURIComponent(area)}`);
   const d = await r.json();
   return d.meals || [];
 }
-
 async function searchByName(q) {
   const r = await fetch(`${BASE}/search.php?s=${encodeURIComponent(q)}`);
   const d = await r.json();
@@ -47,11 +40,9 @@ async function loadDefaults() {
   const results = await Promise.all(DEFAULT_QUERIES.map(q => searchByName(q)));
   const seen = new Set();
   const merged = [];
-  for (const arr of results) {
-    for (const m of arr) {
+  for (const arr of results)
+    for (const m of arr)
       if (!seen.has(m.idMeal)) { seen.add(m.idMeal); merged.push(m); }
-    }
-  }
   return merged;
 }
 
@@ -60,20 +51,64 @@ function getIngCount(meal) {
   for (let i = 1; i <= 20; i++) if (meal[`strIngredient${i}`]?.trim()) c++;
   return c;
 }
-
 function applySort(meals, sort) {
   if (sort === "az")      return [...meals].sort((a, b) => a.strMeal.localeCompare(b.strMeal));
   if (sort === "za")      return [...meals].sort((a, b) => b.strMeal.localeCompare(a.strMeal));
-  if (sort === "area")    return [...meals].sort((a, b) => (a.strArea || "").localeCompare(b.strArea || ""));
+  if (sort === "area")    return [...meals].sort((a, b) => (a.strArea||"").localeCompare(b.strArea||""));
   if (sort === "ingDesc") return [...meals].sort((a, b) => getIngCount(b) - getIngCount(a));
   if (sort === "ingAsc")  return [...meals].sort((a, b) => getIngCount(a) - getIngCount(b));
   return meals;
 }
-
 function loadFavs() {
   try { return JSON.parse(localStorage.getItem("rg-favs") || "[]"); } catch { return []; }
 }
 
+const KNOWN_CATEGORIES = new Set([
+  "Beef","Breakfast","Chicken","Dessert","Goat","Lamb","Miscellaneous",
+  "Pasta","Pork","Seafood","Side","Starter","Vegan","Vegetarian",
+]);
+const KNOWN_AREAS = new Set([
+  "American","British","Canadian","Chinese","Croatian","Dutch","Egyptian",
+  "Filipino","French","Greek","Indian","Irish","Italian","Jamaican","Japanese",
+  "Kenyan","Malaysian","Mexican","Moroccan","Polish","Portuguese","Russian",
+  "Spanish","Thai","Tunisian","Turkish","Ukrainian","Uruguayan","Vietnamese",
+]);
+
+/* ── Subcomponents defined OUTSIDE App so they never remount on re-render ── */
+function FavBanner({ favIds, onClear }) {
+  return (
+    <div className="fav-banner">
+      <div className="fav-banner-inner">
+        <div>
+          <p className="fav-banner-title">Saved Recipes</p>
+          <p className="fav-banner-sub">{favIds.length} recipe{favIds.length !== 1 ? "s" : ""} in your collection</p>
+        </div>
+        {favIds.length > 0 && (
+          <button className="fav-banner-clear" onClick={onClear}>Clear all</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SectionHeader({ activeFavs, search, area, category, count, hasFilters, onReset }) {
+  const title = activeFavs        ? "Saved Recipes"
+              : search            ? `"${search}"`
+              : area !== "All"    ? `${areaLabel(area)} Cuisine`
+              : category !== "All"? category
+              : "Recipes";
+  return (
+    <div className="section-header">
+      <span className="section-title">{title}</span>
+      <span className="section-sub">{count} result{count !== 1 ? "s" : ""}</span>
+      {hasFilters && !activeFavs && (
+        <button className="section-reset" onClick={onReset}>✕ Reset filters</button>
+      )}
+    </div>
+  );
+}
+
+/* ── App ── */
 export default function App() {
   const [meals,      setMeals]      = useState([]);
   const [loading,    setLoading]    = useState(false);
@@ -89,13 +124,16 @@ export default function App() {
     () => document.body.classList.contains("dark") || localStorage.getItem("rg-theme") === "dark"
   );
 
-  const debounceRef = useRef(null);
   const abortRef    = useRef(null);
+  const debounceRef = useRef(null);
+  /* Always-current values — avoids stale closures without re-creating callbacks */
+  const live = useRef({ search: "", category: "All", area: "All" });
+  live.current = { search, category, area };
 
   /* Dark mode */
   useEffect(() => {
-    if (isDark) { document.body.classList.add("dark");    localStorage.setItem("rg-theme", "dark");  }
-    else        { document.body.classList.remove("dark"); localStorage.setItem("rg-theme", "light"); }
+    document.body.classList.toggle("dark", isDark);
+    localStorage.setItem("rg-theme", isDark ? "dark" : "light");
   }, [isDark]);
 
   /* Persist favs */
@@ -103,78 +141,46 @@ export default function App() {
     try { localStorage.setItem("rg-favs", JSON.stringify(favIds)); } catch {}
   }, [favIds]);
 
-  /* ── Core fetch — chooses right API strategy based on active filters ── */
+  /* ── Core fetch — explicit args only, never reads state ── */
   const fetchData = useCallback(async (q, cat, ar) => {
     abortRef.current?.abort();
     const ctrl = new AbortController();
     abortRef.current = ctrl;
-
     setLoading(true);
+
     try {
-      let result    = [];
-      const hasQ    = q.trim() !== "";
-      const hasCat  = cat !== "All";
-      const hasArea = ar  !== "All";
+      let result = [];
+      const hasQ  = q.trim() !== "";
+      const hasCat = cat !== "All";
+      const hasAr  = ar  !== "All";
 
-      if (!hasQ && !hasCat && !hasArea) {
-        /* Default home view */
+      if (!hasQ && !hasCat && !hasAr) {
         result = await loadDefaults();
-
-      } else if (!hasQ && !hasCat && hasArea) {
-        /* Area only — filter.php?a=Indian returns slim list, batch lookup for full details */
-        const slim = await fetchByArea(ar);
-        result = await batchLookup(slim, 24);
-
-      } else if (!hasQ && hasCat && !hasArea) {
-        /* Category only */
-        const slim = await fetchByCategory(cat);
-        result = await batchLookup(slim, 24);
-
-      } else if (!hasQ && hasCat && hasArea) {
-        /* Category + Area — fetch category slim list, batch lookup, then filter by area client-side
-           (The API strArea on full meal matches the same string from list.php?a=list) */
-        const slim = await fetchByCategory(cat);
-        const full = await batchLookup(slim, 60);
+      } else if (!hasQ && !hasCat && hasAr) {
+        result = await batchLookup(await fetchByArea(ar), 24);
+      } else if (!hasQ && hasCat && !hasAr) {
+        result = await batchLookup(await fetchByCategory(cat), 24);
+      } else if (!hasQ && hasCat && hasAr) {
+        const full = await batchLookup(await fetchByCategory(cat), 60);
         result = full.filter(m => m.strArea === ar);
-
-      } else if (hasQ && !hasCat && !hasArea) {
-        /* Text search only */
+      } else if (hasQ && !hasCat && !hasAr) {
         result = await searchByName(q.trim());
-
-      } else if (hasQ && hasCat && !hasArea) {
-        /* Search + Category */
-        const [catSlim, searchFull] = await Promise.all([
-          fetchByCategory(cat),
-          searchByName(q.trim()),
-        ]);
-        const catIds = new Set(catSlim.map(m => m.idMeal));
-        result = searchFull.filter(m => catIds.has(m.idMeal));
-        if (result.length === 0) result = await batchLookup(catSlim, 24);
-
-      } else if (hasQ && !hasCat && hasArea) {
-        /* Search + Area */
-        const [areaSlim, searchFull] = await Promise.all([
-          fetchByArea(ar),
-          searchByName(q.trim()),
-        ]);
-        const areaIds = new Set(areaSlim.map(m => m.idMeal));
-        result = searchFull.filter(m => areaIds.has(m.idMeal));
-        if (result.length === 0) result = await batchLookup(areaSlim, 24);
-
+      } else if (hasQ && hasCat && !hasAr) {
+        const [slim, found] = await Promise.all([fetchByCategory(cat), searchByName(q.trim())]);
+        const ids = new Set(slim.map(m => m.idMeal));
+        result = found.filter(m => ids.has(m.idMeal));
+        if (!result.length) result = await batchLookup(slim, 24);
+      } else if (hasQ && !hasCat && hasAr) {
+        const [slim, found] = await Promise.all([fetchByArea(ar), searchByName(q.trim())]);
+        const ids = new Set(slim.map(m => m.idMeal));
+        result = found.filter(m => ids.has(m.idMeal));
+        if (!result.length) result = await batchLookup(slim, 24);
       } else {
-        /* Search + Category + Area */
-        const [catSlim, areaSlim, searchFull] = await Promise.all([
-          fetchByCategory(cat),
-          fetchByArea(ar),
-          searchByName(q.trim()),
-        ]);
-        const catIds  = new Set(catSlim.map(m => m.idMeal));
-        const areaIds = new Set(areaSlim.map(m => m.idMeal));
-        result = searchFull.filter(m => catIds.has(m.idMeal) && areaIds.has(m.idMeal));
-        if (result.length === 0) {
-          const catFull = await batchLookup(catSlim, 60);
-          result = catFull.filter(m => areaIds.has(m.idMeal));
-        }
+        const [cSlim, aSlim, found] = await Promise.all([fetchByCategory(cat), fetchByArea(ar), searchByName(q.trim())]);
+        const cIds = new Set(cSlim.map(m => m.idMeal));
+        const aIds = new Set(aSlim.map(m => m.idMeal));
+        result = found.filter(m => cIds.has(m.idMeal) && aIds.has(m.idMeal));
+        if (!result.length) result = (await batchLookup(cSlim, 60)).filter(m => aIds.has(m.idMeal));
       }
 
       if (!ctrl.signal.aborted) setMeals(result);
@@ -185,172 +191,166 @@ export default function App() {
     }
   }, []);
 
-  /* Initial load */
+  /* Initial load — runs once */
   useEffect(() => { fetchData("", "All", "All"); }, []);
 
-  /* Debounced fetch on filter changes */
+  /* Debounced search — skips the very first mount (initialised flag) */
+  const mountedRef = useRef(false);
   useEffect(() => {
+    if (!mountedRef.current) { mountedRef.current = true; return; }
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      fetchData(search, category, area);
+      fetchData(search, live.current.category, live.current.area);
     }, 380);
     return () => clearTimeout(debounceRef.current);
-  }, [search, category, area]);
+  }, [search]);
 
-  const quickSearch = (term) => {
-    setSearch(term);
-    setCategory("All");
-    setArea("All");
-    setShowFavs(false);
-    fetchData(term, "All", "All");
-  };
-
-  const handleCategoryChange = (value) => {
+  /* ── Filter handlers ── */
+  const handleCategoryChange = useCallback((value) => {
     setSearch("");
     setShowFavs(false);
     setCategory(value);
-  };
+    fetchData("", value, live.current.area);
+  }, [fetchData]);
 
-  const handleAreaChange = (value) => {
+  const handleAreaChange = useCallback((value) => {
     setSearch("");
     setShowFavs(false);
     setArea(value);
-  };
+    fetchData("", live.current.category, value);
+  }, [fetchData]);
 
-  const toggleFav = (id) => {
+  const handleSortChange = useCallback((value) => { setSort(value); }, []);
+
+  const handleReset = useCallback(() => {
+    setCategory("All");
+    setArea("All");
+    setSort("default");
+    fetchData(live.current.search, "All", "All");
+  }, [fetchData]);
+
+  /* quickSearch — routes to category / area / text correctly */
+  const quickSearch = useCallback((term) => {
+    setShowFavs(false);
+    const t = term.charAt(0).toUpperCase() + term.slice(1).toLowerCase();
+
+    if (KNOWN_CATEGORIES.has(t)) {
+      setSearch(""); setArea("All"); setSort("default");
+      setCategory(t);
+      fetchData("", t, "All");
+    } else if (KNOWN_AREAS.has(t)) {
+      setSearch(""); setCategory("All"); setSort("default");
+      setArea(t);
+      fetchData("", "All", t);
+    } else {
+      /* plain text — set search but DON'T call fetchData; the debounce effect handles it */
+      setCategory("All"); setArea("All"); setSort("default");
+      setSearch(term);
+      /* cancel any pending debounce and fire immediately */
+      clearTimeout(debounceRef.current);
+      fetchData(term, "All", "All");
+    }
+  }, [fetchData]);
+
+  const toggleFav = useCallback((id) => {
     setFavIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-  };
+  }, []);
 
-  const navigate = useNavigate();
-  const location = useLocation();
+  const navigate     = useNavigate();
+  const location     = useLocation();
   const isSavedRoute = location.pathname === "/saved";
 
   useEffect(() => {
     if (isSavedRoute) { setSearch(""); setShowFavs(true); }
   }, [isSavedRoute]);
 
-  const handleView = (meal) => {
+  const handleView = useCallback((meal) => {
     navigate(`/recipe/${meal.idMeal}`, { state: { meal } });
-  };
+  }, [navigate]);
 
   const activeFavs = isSavedRoute || showFavs;
-  let displayed    = activeFavs ? meals.filter(m => favIds.includes(m.idMeal)) : meals;
-  displayed        = applySort(displayed, sort);
+  const displayed  = applySort(
+    activeFavs ? meals.filter(m => favIds.includes(m.idMeal)) : meals,
+    sort
+  );
   const hasFilters = category !== "All" || area !== "All" || sort !== "default";
+  const showHero   = !activeFavs && !search && category === "All" && area === "All";
 
-  /* ── Shared layout blocks ── */
-  const FavBanner = () => (
-    <div className="fav-banner">
-      <div className="fav-banner-inner">
-        <div>
-          <p className="fav-banner-title">Saved Recipes</p>
-          <p className="fav-banner-sub">{favIds.length} recipe{favIds.length !== 1 ? "s" : ""} in your collection</p>
-        </div>
-        {favIds.length > 0 && (
-          <button className="fav-banner-clear" onClick={() => setFavIds([])}>
-            Clear all
-          </button>
-        )}
-      </div>
-    </div>
-  );
+  /* Shared props objects — stable references avoid unnecessary re-renders */
+  const filterBarProps = {
+    category, setCategory: handleCategoryChange,
+    area,     setArea:     handleAreaChange,
+    sort,     setSort:     handleSortChange,
+    categories, setCategories,
+    areas,      setAreas,
+    resultCount: displayed.length,
+    loading,
+  };
 
-  const MainGrid = () => (
-    <main className="page-body">
-      {(search || activeFavs || hasFilters) && (
-        <div className="section-header">
-          <span className="section-title">
-            {activeFavs    ? "Saved Recipes"
-             : search      ? `"${search}"`
-             : area !== "All" ? `${areaLabel(area)} Cuisine`
-             : category !== "All" ? category
-             : "Recipes"}
-          </span>
-          <span className="section-sub">{displayed.length} result{displayed.length !== 1 ? "s" : ""}</span>
-          {hasFilters && !activeFavs && (
-            <button className="section-reset" onClick={() => { setCategory("All"); setArea("All"); setSort("default"); }}>
-              ✕ Reset filters
-            </button>
-          )}
-        </div>
-      )}
-      <RecipeGrid
-        meals={displayed}
-        loading={loading}
-        favIds={favIds}
-        isDark={isDark}
-        onToggleFav={toggleFav}
-        onView={handleView}
-        query={search}
-        onQuickSearch={quickSearch}
-        categories={categories}
-      />
-    </main>
-  );
+  const gridProps = {
+    meals: displayed, loading,
+    favIds, isDark,
+    onToggleFav: toggleFav,
+    onView: handleView,
+    query: search,
+    onQuickSearch: quickSearch,
+    categories,
+  };
 
   return (
     <>
       {loading && <div className="loading-bar" />}
 
       <Header
-        search={search}       setSearch={setSearch}
+        search={search}     setSearch={setSearch}
         favCount={favIds.length}
-        showFavs={showFavs}   setShowFavs={setShowFavs}
-        isDark={isDark}       setIsDark={setIsDark}
+        showFavs={showFavs} setShowFavs={setShowFavs}
+        isDark={isDark}     setIsDark={setIsDark}
       />
 
       <Routes>
-        <Route
-          path="/"
-          element={
-            <>
-              {!activeFavs && !search && <Hero onQuickSearch={quickSearch} />}
-              {activeFavs && <FavBanner />}
-              <FilterBar
-                category={category}     setCategory={handleCategoryChange}
-                area={area}             setArea={handleAreaChange}
-                sort={sort}             setSort={setSort}
-                categories={categories} setCategories={setCategories}
-                areas={areas}           setAreas={setAreas}
-                resultCount={displayed.length}
-                loading={loading}
-              />
-              <MainGrid />
-            </>
-          }
-        />
-
-        <Route
-          path="/saved"
-          element={
-            <>
-              {activeFavs && <FavBanner />}
-              <FilterBar
-                category={category}     setCategory={handleCategoryChange}
-                area={area}             setArea={handleAreaChange}
-                sort={sort}             setSort={setSort}
-                categories={categories} setCategories={setCategories}
-                areas={areas}           setAreas={setAreas}
-                resultCount={displayed.length}
-                loading={loading}
-              />
-              <MainGrid />
-            </>
-          }
-        />
-
-        <Route
-          path="/recipe/:id"
-          element={
+        <Route path="/" element={
+          <>
+            {showHero && <Hero onQuickSearch={quickSearch} />}
+            {activeFavs && <FavBanner favIds={favIds} onClear={() => setFavIds([])} />}
+            <FilterBar {...filterBarProps} />
             <main className="page-body">
-              <RecipeDetailPage
-                favIds={favIds}
-                toggleFav={toggleFav}
-                isDark={isDark}
-              />
+              {(search || activeFavs || hasFilters) && (
+                <SectionHeader
+                  activeFavs={activeFavs} search={search}
+                  area={area} category={category}
+                  count={displayed.length} hasFilters={hasFilters}
+                  onReset={handleReset}
+                />
+              )}
+              <RecipeGrid {...gridProps} />
             </main>
-          }
-        />
+          </>
+        } />
+
+        <Route path="/saved" element={
+          <>
+            {activeFavs && <FavBanner favIds={favIds} onClear={() => setFavIds([])} />}
+            <FilterBar {...filterBarProps} />
+            <main className="page-body">
+              {(search || activeFavs || hasFilters) && (
+                <SectionHeader
+                  activeFavs={activeFavs} search={search}
+                  area={area} category={category}
+                  count={displayed.length} hasFilters={hasFilters}
+                  onReset={handleReset}
+                />
+              )}
+              <RecipeGrid {...gridProps} />
+            </main>
+          </>
+        } />
+
+        <Route path="/recipe/:id" element={
+          <main className="page-body">
+            <RecipeDetailPage favIds={favIds} toggleFav={toggleFav} isDark={isDark} />
+          </main>
+        } />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

@@ -32,12 +32,6 @@ export function areaLabel(apiValue) {
   return AREA_LABEL_MAP[apiValue] || apiValue;
 }
 
-/* ─────────────────────────────────────────────────────
-   Portal panel — rendered into document.body so it
-   escapes ALL overflow/clip constraints, then positioned
-   precisely using getBoundingClientRect() on every open.
-   On mobile (≤680px) it snaps to full screen width.
-───────────────────────────────────────────────────── */
 function DropdownPanel({ triggerRef, open, onClose, children, alignRight }) {
   const panelRef = useRef(null);
   const [style, setStyle] = useState({ visibility: "hidden" });
